@@ -1,6 +1,7 @@
 .DS_Store
 .vscode/
 geo-env/
+results/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

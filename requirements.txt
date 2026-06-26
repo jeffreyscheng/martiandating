@@ -1,0 +1,7 @@
+jax>=0.4
+jaxlib>=0.4
+blackjax>=1.0
+matplotlib
+pandas
+scipy
+numpy
