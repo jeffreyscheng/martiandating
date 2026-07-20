@@ -39,6 +39,28 @@ Changing grid resolution or allowing a rougher diffusion distribution does not
 remove that pattern. A 15% fixed discrepancy term covers 18/18 observations,
 but should not be selected merely because it passes the check.
 
+## Mixing animations
+
+`primary/primary-chain-comets.gif` preserves chronological order for all 256
+chains in the physical `(Ea, mean ln(D0/r²))` plane. Each chain's color is fixed
+by its activation-energy quartile over the first 100 retained draws. The early
+color separation therefore records where chains began; later interpenetration
+shows that those starting groups do not remain in separate regions. Trails use
+the preceding 70 consecutive draws, and the pale background is the pooled
+posterior density.
+
+`primary/primary-chain-contraction.gif` plots the running mean of every chain in
+the same plane. Its right panels use the exact rank/folded R-hat and bulk-ESS
+values saved at the production run's 250-draw checkpoints. These show the 256
+chain means contracting toward one expectation while max R-hat falls from
+1.0648 to 1.0037 and minimum bulk ESS rises from 2,481 to 61,670. Divergences
+remain zero. Both animations begin with retained draws after the 500 discarded
+fixed-kernel settling draws; they do not depict adaptation or settling.
+
+The animations are supporting visual diagnostics. The numerical R-hat, ESS,
+BFMI, divergence, tree-depth, and independent-replication checks remain the
+mixing criteria.
+
 ## Results
 
 The interval column is the central 95% interval and median for the maximum
@@ -87,7 +109,8 @@ paper-level conclusion.
 ## Files
 
 Each run directory contains its exact manifest, final sampler diagnostics, and
-analysis summary. `primary/` also contains the publication plots and a compact
-25,600-sample posterior subset; `replicate/` contains the independently seeded
-subset. The full run can be reproduced with `run_flexible_mdd.py` and analyzed
-with `analyze_flexible_mdd.py`.
+analysis summary. `primary/` also contains the checkpoint diagnostic history,
+mixing animations, publication plots, and a compact 25,600-sample posterior
+subset; `replicate/` contains the independently seeded subset. The full run can
+be reproduced with `run_flexible_mdd.py`, analyzed with
+`analyze_flexible_mdd.py`, and animated with `animate_flexible_chains.py`.
