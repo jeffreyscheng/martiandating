@@ -45,11 +45,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--fps", type=int, default=12)
     parser.add_argument("--seconds", type=float, default=10.0)
-    parser.add_argument("--trail-draws", type=int, default=70)
+    parser.add_argument("--trail-frames", type=int, default=22)
+    parser.add_argument("--smoothing-draws", type=int, default=31)
+    parser.add_argument("--domain-split", type=float, default=5.5)
+    parser.add_argument(
+        "--only", choices=("both", "comets", "contraction"), default="both"
+    )
     return parser.parse_args()
 
 
-def physical_summaries(result_dir: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def physical_summaries(
+    result_dir: Path, domain_split: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     posterior = np.load(result_dir / "posterior.npz")
     position = posterior["position"]
     manifest = json.loads((result_dir / "manifest.json").read_text())
@@ -63,8 +70,18 @@ def physical_summaries(result_dir: Path) -> tuple[np.ndarray, np.ndarray, np.nda
     logd_mean = np.einsum("tcb,b->tc", logits, posterior["grid"])
     centered = posterior["grid"][None, None, :] - logd_mean[:, :, None]
     logd_sd = np.sqrt(np.einsum("tcb,tcb->tc", logits, centered**2))
+    slower = posterior["grid"] < domain_split
+    faster = ~slower
+    if not np.any(slower) or not np.any(faster):
+        raise ValueError("--domain-split must lie inside the diffusion grid")
+    slow_centroid = np.sum(
+        logits[:, :, slower] * posterior["grid"][slower], axis=2
+    ) / np.sum(logits[:, :, slower], axis=2)
+    fast_centroid = np.sum(
+        logits[:, :, faster] * posterior["grid"][faster], axis=2
+    ) / np.sum(logits[:, :, faster], axis=2)
     ea = 117.0 + 5.4 * position[:, :, -1]
-    return ea, logd_mean, logd_sd
+    return ea, logd_mean, logd_sd, slow_centroid, fast_centroid
 
 
 def load_checkpoints(result_dir: Path) -> list[dict[str, float]]:
@@ -116,25 +133,47 @@ def checkpoint_at(checkpoints: list[dict[str, float]], draw: int):
     return available[-1] if available else None
 
 
-def segments_for_frame(
+def moving_average(values: np.ndarray, window: int) -> np.ndarray:
+    """Centered display smoothing with reflected edges; samples stay unmodified."""
+    if window <= 1:
+        return values.copy()
+    if window % 2 == 0:
+        window += 1
+    radius = window // 2
+    padded = np.pad(values, ((radius, radius), (0, 0)), mode="reflect")
+    cumulative = np.vstack((np.zeros((1, values.shape[1])), np.cumsum(padded, axis=0)))
+    return (cumulative[window:] - cumulative[:-window]) / window
+
+
+def representative_chains(ea: np.ndarray, count: int = 5) -> np.ndarray:
+    """Select deterministic chains spanning the first-100-draw Ea distribution."""
+    initial = ea[: min(100, len(ea))].mean(axis=0)
+    order = np.argsort(initial, kind="stable")
+    ranks = np.linspace(0.08, 0.92, count)
+    return order[np.rint(ranks * (len(order) - 1)).astype(int)]
+
+
+def fading_segments(
     x: np.ndarray,
     y: np.ndarray,
-    end: int,
-    trail_draws: int,
-    groups: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    start = max(0, end - trail_draws + 1)
-    segments = []
-    colors = []
-    for chain in range(x.shape[1]):
-        points = np.column_stack((x[start : end + 1, chain], y[start : end + 1, chain]))
-        if len(points) < 2:
-            continue
-        segments.extend(np.stack((points[:-1], points[1:]), axis=1))
-        alpha = np.linspace(0.035, 0.62, len(points) - 1)
-        base = matplotlib.colors.to_rgba(COLORS[groups[chain]])
-        colors.extend([(base[0], base[1], base[2], value) for value in alpha])
-    return np.asarray(segments), np.asarray(colors)
+    color: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    points = np.column_stack((x, y))
+    if len(points) < 2:
+        return np.empty((0, 2, 2)), np.empty((0, 4)), np.empty(0)
+    segments = np.stack((points[:-1], points[1:]), axis=1)
+    recency = np.linspace(0.0, 1.0, len(segments))
+    rgba = matplotlib.colors.to_rgba(color)
+    colors = np.column_stack(
+        (
+            np.full(len(segments), rgba[0]),
+            np.full(len(segments), rgba[1]),
+            np.full(len(segments), rgba[2]),
+            0.05 + 0.90 * recency**1.7,
+        )
+    )
+    widths = 0.45 + 2.0 * recency**1.6
+    return segments, colors, widths
 
 
 def save_animation(movie, path: Path, fps: int, dpi: int = 105) -> None:
@@ -180,34 +219,72 @@ def mp4_to_gif(mp4_path: Path, gif_path: Path, fps: int) -> None:
 
 def render_comets(
     ea: np.ndarray,
-    logd_mean: np.ndarray,
-    groups: np.ndarray,
-    checkpoints: list[dict[str, float]],
+    slow_centroid: np.ndarray,
+    fast_centroid: np.ndarray,
+    domain_split: float,
     output_dir: Path,
     fps: int,
     seconds: float,
-    trail_draws: int,
+    trail_frames: int,
+    smoothing_draws: int,
 ) -> tuple[Path, Path]:
     plt.rcParams.update({"font.family": "DejaVu Sans", "text.color": TEXT})
     fig, axis = plt.subplots(figsize=(10.2, 6.2), facecolor=BG)
     fig.subplots_adjust(left=0.105, right=0.965, bottom=0.14, top=0.80)
     style_axis(axis)
     axis.set_xlabel("shared activation energy  Ea  (kJ/mol)")
-    axis.set_ylabel("mean diffusion scale  ln(D₀/r²)")
+    axis.set_ylabel("domain diffusion scale  ln(D₀/r²)")
     axis.set_xlim(*padded_limits(ea))
-    axis.set_ylim(*padded_limits(logd_mean))
+    combined = np.concatenate((slow_centroid.ravel(), fast_centroid.ravel()))
+    axis.set_ylim(*padded_limits(combined))
 
     background_stride = max(1, len(ea) // 800)
     axis.hexbin(
         ea[::background_stride].ravel(),
-        logd_mean[::background_stride].ravel(),
-        gridsize=58,
+        slow_centroid[::background_stride].ravel(),
+        gridsize=54,
         cmap="Blues",
         mincnt=1,
         bins="log",
-        alpha=0.28,
+        alpha=0.24,
         linewidths=0,
     )
+    axis.hexbin(
+        ea[::background_stride].ravel(),
+        fast_centroid[::background_stride].ravel(),
+        gridsize=54,
+        cmap="Oranges",
+        mincnt=1,
+        bins="log",
+        alpha=0.20,
+        linewidths=0,
+    )
+    axis.axhspan(axis.get_ylim()[0], domain_split, color="#408fca", alpha=0.035)
+    axis.axhspan(domain_split, axis.get_ylim()[1], color="#d88d3e", alpha=0.035)
+    axis.axhline(domain_split, color=GRID, lw=0.8, ls="--")
+    axis.text(
+        0.014,
+        0.955,
+        "faster-diffusing region",
+        transform=axis.transAxes,
+        color="#e8a35d",
+        va="top",
+        fontsize=9.5,
+        fontweight="bold",
+    )
+    axis.text(
+        0.014,
+        0.055,
+        "slower-diffusing region",
+        transform=axis.transAxes,
+        color="#75b9e6",
+        va="bottom",
+        fontsize=9.5,
+        fontweight="bold",
+    )
+
+    selected = representative_chains(ea, 5)
+    chain_colors = np.asarray(["#62b6f0", "#60d2a6", "#f1c75b", "#ee8969", "#b18ae8"])
     legend_handles = [
         Line2D(
             [0],
@@ -217,35 +294,65 @@ def render_comets(
             markerfacecolor=color,
             markeredgecolor="none",
             markersize=6,
-            label=f"initial Ea quartile {index + 1}",
+            label=f"chain {chain + 1}",
         )
-        for index, color in enumerate(COLORS)
+        for chain, color in zip(selected, chain_colors)
     ]
-    legend = axis.legend(
+    legend_handles.extend(
+        [
+            Line2D(
+                [0], [0], marker="o", color="white", markerfacecolor="none",
+                linestyle="none", markersize=6, label="slower centroid"
+            ),
+            Line2D(
+                [0], [0], marker="D", color="white", markerfacecolor="none",
+                linestyle="none", markersize=5, label="faster centroid"
+            ),
+        ]
+    )
+    axis.legend(
         handles=legend_handles,
         loc="upper right",
         frameon=False,
-        ncol=2,
-        fontsize=8,
+        ncol=4,
+        fontsize=7.6,
         labelcolor=MUTED,
-        title="fixed chain colors",
-        title_fontsize=8,
     )
-    legend.get_title().set_color(MUTED)
 
-    collection = LineCollection([], linewidths=0.75)
-    axis.add_collection(collection)
-    heads = axis.scatter(
-        ea[0],
-        logd_mean[0],
-        s=10,
-        c=COLORS[groups],
-        alpha=0.88,
-        edgecolors="none",
-        zorder=3,
-    )
+    smooth_ea = moving_average(ea[:, selected], smoothing_draws)
+    smooth_slow = moving_average(slow_centroid[:, selected], smoothing_draws)
+    smooth_fast = moving_average(fast_centroid[:, selected], smoothing_draws)
+
+    # Five chains enter one at a time, then overlap for most of the animation.
+    # Each traverses all retained draws and vanishes as soon as it completes.
+    life_frames = max(36, round(seconds * fps))
+    entry_gap = max(3, round(0.55 * fps))
+    pause_frames = max(3, round(0.45 * fps))
+    frame_count = life_frames + entry_gap * (len(selected) - 1) + pause_frames
+    draw_lookup = np.linspace(0, len(ea) - 1, life_frames, dtype=int)
+
+    collections = []
+    slow_heads = []
+    fast_heads = []
+    for color in chain_colors:
+        slow_line = LineCollection([], linewidths=[])
+        fast_line = LineCollection([], linewidths=[])
+        axis.add_collection(slow_line)
+        axis.add_collection(fast_line)
+        slow_head, = axis.plot(
+            [], [], marker="o", markersize=5.5, markerfacecolor="#ffffff",
+            markeredgecolor=color, markeredgewidth=1.5, linestyle="none", zorder=4
+        )
+        fast_head, = axis.plot(
+            [], [], marker="D", markersize=5.0, markerfacecolor="#ffffff",
+            markeredgecolor=color, markeredgewidth=1.5, linestyle="none", zorder=4
+        )
+        collections.append((slow_line, fast_line))
+        slow_heads.append(slow_head)
+        fast_heads.append(fast_head)
+
     fig.suptitle(
-        "all 256 posterior chains move through the same region",
+        "paired diffusion regimes share one activation energy",
         x=0.105,
         y=0.945,
         ha="left",
@@ -255,43 +362,62 @@ def render_comets(
     fig.text(
         0.105,
         0.885,
-        "colors record each chain's first-100-draw Ea quartile; mixing makes those colors interpenetrate",
+        "five representative chains · two synchronized comets per chain · old trajectory segments disappear",
         color=MUTED,
         fontsize=9.5,
     )
     status = fig.text(0.105, 0.055, "", color=MUTED, fontsize=9.3)
 
-    moving_frames = max(2, round(seconds * fps) - fps)
-    positions = np.linspace(0, len(ea) - 1, moving_frames, dtype=int)
-    positions = np.concatenate([positions, np.full(fps, len(ea) - 1)])
-
     def update(frame: int):
-        end = int(positions[frame])
-        segments, segment_colors = segments_for_frame(
-            ea, logd_mean, end, trail_draws, groups
-        )
-        collection.set_segments(segments)
-        collection.set_color(segment_colors)
-        heads.set_offsets(np.column_stack((ea[end], logd_mean[end])))
-        current = checkpoint_at(checkpoints, end + 1)
-        if current is None:
-            diagnostic = "checkpoint diagnostics begin at draw 250"
-        else:
-            diagnostic = (
-                f"max rank/folded R̂ {current['rhat']:.4f}   ·   "
-                f"min bulk ESS {current['bulk']:,.0f}   ·   "
-                f"divergences {current['divergences']}"
-            )
+        active = 0
+        progress = []
+        artists = [status]
+        for index in range(len(selected)):
+            local = frame - index * entry_gap
+            slow_line, fast_line = collections[index]
+            if local < 0 or local >= life_frames:
+                slow_line.set_segments([])
+                fast_line.set_segments([])
+                slow_heads[index].set_data([], [])
+                fast_heads[index].set_data([], [])
+            else:
+                active += 1
+                start_local = max(0, local - trail_frames + 1)
+                local_indices = np.arange(start_local, local + 1)
+                draws = draw_lookup[local_indices]
+                color = chain_colors[index]
+                slow_segments, slow_colors, slow_widths = fading_segments(
+                    smooth_ea[draws, index], smooth_slow[draws, index], color
+                )
+                fast_segments, fast_colors, fast_widths = fading_segments(
+                    smooth_ea[draws, index], smooth_fast[draws, index], color
+                )
+                slow_line.set_segments(slow_segments)
+                slow_line.set_color(slow_colors)
+                slow_line.set_linewidths(slow_widths)
+                fast_line.set_segments(fast_segments)
+                fast_line.set_color(fast_colors)
+                fast_line.set_linewidths(fast_widths)
+                draw = int(draw_lookup[local])
+                slow_heads[index].set_data(
+                    [smooth_ea[draw, index]], [smooth_slow[draw, index]]
+                )
+                fast_heads[index].set_data(
+                    [smooth_ea[draw, index]], [smooth_fast[draw, index]]
+                )
+                progress.append(f"{selected[index] + 1}: {draw + 1:,}")
+            artists.extend((slow_line, fast_line, slow_heads[index], fast_heads[index]))
         status.set_text(
-            f"retained draw {end + 1:,} / {len(ea):,}   ·   "
-            f"{trail_draws}-draw trails   ·   {diagnostic}"
+            f"{active} active chains   ·   retained draw by chain  "
+            + ("  |  ".join(progress) if progress else "complete")
+            + f"   ·   {smoothing_draws}-draw moving-average display path"
         )
-        return collection, heads, status
+        return artists
 
     movie = animation.FuncAnimation(
         fig,
         update,
-        frames=len(positions),
+        frames=frame_count,
         interval=1000 / fps,
         blit=False,
     )
@@ -467,31 +593,36 @@ def main() -> None:
     args = parse_args()
     output_dir = args.output_dir or args.result_dir / "animations"
     output_dir.mkdir(parents=True, exist_ok=True)
-    ea, logd_mean, _ = physical_summaries(args.result_dir)
+    ea, logd_mean, _, slow_centroid, fast_centroid = physical_summaries(
+        args.result_dir, args.domain_split
+    )
     checkpoints = load_checkpoints(args.result_dir)
     groups = chain_groups(ea)
     print(f"Loaded {ea.shape[1]} chains x {ea.shape[0]} retained draws")
-    for path in render_comets(
-        ea,
-        logd_mean,
-        groups,
-        checkpoints,
-        output_dir,
-        args.fps,
-        args.seconds,
-        args.trail_draws,
-    ):
-        print(f"Saved {path} ({path.stat().st_size / 1e6:.1f} MB)")
-    for path in render_contraction(
-        ea,
-        logd_mean,
-        groups,
-        checkpoints,
-        output_dir,
-        args.fps,
-        args.seconds,
-    ):
-        print(f"Saved {path} ({path.stat().st_size / 1e6:.1f} MB)")
+    if args.only in ("both", "comets"):
+        for path in render_comets(
+            ea,
+            slow_centroid,
+            fast_centroid,
+            args.domain_split,
+            output_dir,
+            args.fps,
+            args.seconds,
+            args.trail_frames,
+            args.smoothing_draws,
+        ):
+            print(f"Saved {path} ({path.stat().st_size / 1e6:.1f} MB)")
+    if args.only in ("both", "contraction"):
+        for path in render_contraction(
+            ea,
+            logd_mean,
+            groups,
+            checkpoints,
+            output_dir,
+            args.fps,
+            args.seconds,
+        ):
+            print(f"Saved {path} ({path.stat().st_size / 1e6:.1f} MB)")
 
 
 if __name__ == "__main__":
