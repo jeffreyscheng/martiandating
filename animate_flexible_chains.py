@@ -31,6 +31,14 @@ GRID = "#313641"
 TEXT = "#edf0f5"
 MUTED = "#9299a7"
 COLORS = np.asarray(["#55a7e0", "#58c49b", "#f0be5a", "#e36f63"])
+SLOW_DENSITY_CMAP = matplotlib.colors.LinearSegmentedColormap.from_list(
+    "dark_background_blues",
+    [PANEL, "#101c27", "#17364d", "#265f85"],
+)
+FAST_DENSITY_CMAP = matplotlib.colors.LinearSegmentedColormap.from_list(
+    "dark_background_oranges",
+    [PANEL, "#24180f", "#4b2d17", "#8b4c20"],
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -283,10 +291,9 @@ def render_comets(
         background_slow,
         gridsize=hex_grid,
         extent=hex_extent,
-        cmap="Blues",
+        cmap=SLOW_DENSITY_CMAP,
         mincnt=1,
         bins="log",
-        alpha=0.24,
         linewidths=0,
     )
     fast_hexes = axis.hexbin(
@@ -294,10 +301,9 @@ def render_comets(
         background_fast,
         gridsize=hex_grid,
         extent=hex_extent,
-        cmap="Oranges",
+        cmap=FAST_DENSITY_CMAP,
         mincnt=1,
         bins="log",
-        alpha=0.20,
         linewidths=0,
     )
     fig.canvas.draw()
@@ -307,8 +313,6 @@ def render_comets(
         f"Hex grid {hex_grid}: screen width/height "
         f"{slow_ratio:.4f} / {fast_ratio:.4f}; regular target {2 / np.sqrt(3):.4f}"
     )
-    axis.axhspan(axis.get_ylim()[0], domain_split, color="#408fca", alpha=0.035)
-    axis.axhspan(domain_split, axis.get_ylim()[1], color="#d88d3e", alpha=0.035)
     axis.axhline(domain_split, color=GRID, lw=0.8, ls="--")
     axis.text(
         0.014,

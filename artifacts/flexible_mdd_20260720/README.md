@@ -52,7 +52,9 @@ increases toward the current draw, and each trajectory vanishes after one
 second. The blue and orange backgrounds use all 256 chains. Both hexbins share
 the complete axis extent, and their grid count is solved from the rendered
 pixel transform; measured hex width/height is 1.147 versus 1.155 for a regular
-flat-top hexagon.
+flat-top hexagon. Occupancy counts retain logarithmic normalization, but the
+dark-background colormaps now increase monotonically from the panel color to a
+brighter saturated domain color as count increases.
 
 `primary/primary-chain-contraction.gif` plots the running mean of every chain in
 the same plane. Its right panels use the exact rank/folded R-hat and bulk-ESS
