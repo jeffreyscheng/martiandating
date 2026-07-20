@@ -111,20 +111,23 @@ hrd_logD = last_logD[np.arange(nc), hrd_idx]
 x_pos = np.arange(len(durations))
 width = 0.35
 
-# Bayesian boxplots
+# Bayesian posterior violins
 bayes_results = []
 for dur in durations:
     temps_arr = np.array([max_temp(ea, ld, dur) for ea, ld in zip(hrd_Ea, hrd_logD)])
     bayes_results.append(temps_arr[~np.isnan(temps_arr)])
 
-bp = ax2.boxplot(bayes_results, positions=x_pos + width/2, widths=width,
-                 patch_artist=True, showfliers=False, whis=[2.5, 97.5])
-for patch in bp['boxes']:
-    patch.set_facecolor('#2196F3')
-    patch.set_alpha(0.4)
-for element in ['whiskers', 'caps']:
-    for line in bp[element]:
-        line.set_color('#2196F3')
+bayes_positions = x_pos + width/2
+vp = ax2.violinplot(bayes_results, positions=bayes_positions, widths=width * 1.7,
+                    showmeans=False, showmedians=False, showextrema=False)
+for body in vp['bodies']:
+    body.set_facecolor('#2196F3')
+    body.set_edgecolor('#1565C0')
+    body.set_alpha(0.4)
+for pos, values in zip(bayes_positions, bayes_results):
+    lo, med, hi = np.percentile(values, [2.5, 50, 97.5])
+    ax2.vlines(pos, lo, hi, color='#1565C0', lw=1.4, zorder=4)
+    ax2.scatter(pos, med, color='#0D47A1', s=22, zorder=5)
 
 # S&W point estimates as red diamonds
 ax2.scatter(x_pos - width/2, sw_temps, color='#D32F2F', s=100, marker='D',

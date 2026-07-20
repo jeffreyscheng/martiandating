@@ -194,16 +194,23 @@ for tag in ['PF_NUTS_f003', 'PF_3es_r1', 'PF_3es_r2', 'PF_3es_r3', 'FU_3es_r1', 
         ax2_inset.set_ylim(-0.05, 1.0)
         ax2_inset.set_title('Volume fractions', fontsize=8)
 
-    # Panel C: T-t constraint
-    bp = ax3.boxplot([tt[l] for l in labs], positions=range(len(labs)),
-                     widths=0.5, patch_artist=True, showfliers=False, whis=[2.5, 97.5])
-    for p in bp['boxes']:
-        p.set_facecolor('#2196F3')
-        p.set_alpha(0.4)
+    # Panel C: T-t constraint. Show posterior shape, with explicit central 95%.
+    tt_values = [tt[l] for l in labs]
+    positions = np.arange(len(labs))
+    vp = ax3.violinplot(tt_values, positions=positions, widths=0.72,
+                        showmeans=False, showmedians=False, showextrema=False)
+    for body in vp['bodies']:
+        body.set_facecolor('#2196F3')
+        body.set_edgecolor('#1565C0')
+        body.set_alpha(0.4)
+    for pos, values in zip(positions, tt_values):
+        lo, med, hi = np.percentile(values, [2.5, 50, 97.5])
+        ax3.vlines(pos, lo, hi, color='#1565C0', lw=1.4, zorder=4)
+        ax3.scatter(pos, med, color='#0D47A1', s=22, zorder=5)
     ax3.axhline(0, color='blue', ls='--', lw=1.5, alpha=0.6, label='0°C')
     sw_t = [max_temp(Ea_fixed, 5.7, dur) for dur in durs]
-    ax3.scatter(range(len(labs)), sw_t, color='red', s=80, marker='D', zorder=10, label='S&W')
-    ax3.set_xticks(range(len(labs)))
+    ax3.scatter(positions, sw_t, color='red', s=80, marker='D', zorder=10, label='S&W')
+    ax3.set_xticks(positions)
     ax3.set_xticklabels(labs, rotation=15, fontsize=9)
     ax3.set_ylabel('Max temperature (°C)', fontsize=12)
     ax3.legend(fontsize=8)
