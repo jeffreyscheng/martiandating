@@ -64,6 +64,7 @@ def selected_posterior(
         "weights": physical["weights"],
         "ea": physical["Ea_shared"],
         "draw_indices": selected_draws,
+        "relative_sigma": float(manifest["args"]["relative_sigma"]),
     }
 
 
@@ -306,7 +307,9 @@ def main() -> None:
     durations_s = timed["seconds_per_extraction_step"].to_numpy(float)
     observed = timed["39Ar"].to_numpy(float) / total_ar
     measured_sigma = timed["std_39Ar"].to_numpy(float) / total_ar
-    sigma = np.sqrt(measured_sigma**2 + (0.10 * observed) ** 2)
+    sigma = np.sqrt(
+        measured_sigma**2 + (selected["relative_sigma"] * observed) ** 2
+    )
     likelihood_mask = temperatures_c >= 350
 
     predictions = posterior_predictions(
@@ -370,6 +373,7 @@ def main() -> None:
             "draws_per_chain": args.draws_per_chain,
             "chains": int(selected["weights"].shape[1]),
             "samples": int(np.prod(selected["weights"].shape[:2])),
+            "relative_sigma": selected["relative_sigma"],
         },
         "posterior_predictive": {
             "standardized_residual_rms": float(np.sqrt(np.mean(standardized**2))),
@@ -404,6 +408,14 @@ def main() -> None:
         args.result_dir / "temperature_limits.npz",
         **{f"recent_{label.replace(' ', '_')}": value for label, value in recent_limits.items()},
         **{f"timing_{index}": value for index, value in enumerate(timing_limits.values())},
+    )
+    np.savez_compressed(
+        args.result_dir / "analysis_subset.npz",
+        position=selected["positions"],
+        weights=selected["weights"],
+        ea=selected["ea"],
+        grid=selected["grid"],
+        retained_draw_indices=selected["draw_indices"],
     )
     print(json.dumps(summary, indent=2))
 
