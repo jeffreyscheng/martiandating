@@ -10,6 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from run_flexible_mdd import build_target, load_data, smooth_basis
+from analyze_flexible_mdd import cohort_loss, temperature_limit
 
 jax.config.update("jax_enable_x64", True)
 
@@ -69,6 +70,28 @@ class FlexibleMDDTests(unittest.TestCase):
                 - float(log_density(position - direction))
             ) / (2 * epsilon)
             self.assertAlmostEqual(gradient[index], finite, places=5)
+
+    def test_thermal_loss_increases_with_temperature(self):
+        grid = np.array([5.7])
+        weights = np.ones((3, 1))
+        ea = np.full(3, 117.0)
+        temperatures = np.array([-20.0, 0.0, 20.0])
+        loss = cohort_loss(
+            temperatures, 100.0, 0.0, 1300.0, grid, weights, ea
+        )
+        self.assertTrue(np.all(np.diff(loss) > 0))
+
+    def test_post_event_regrowth_weakens_old_event_constraint(self):
+        grid = np.array([5.7])
+        weights = np.ones((4, 1, 1))
+        ea = np.full((4, 1), 117.0)
+        recent = temperature_limit(
+            100.0, 0.0, 1300.0, 0.01, grid, weights, ea
+        )
+        ancient = temperature_limit(
+            100.0, 1000.0, 1300.0, 0.01, grid, weights, ea
+        )
+        self.assertTrue(np.all(ancient > recent))
 
 
 if __name__ == "__main__":
