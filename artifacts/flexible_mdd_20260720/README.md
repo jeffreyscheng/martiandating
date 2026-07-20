@@ -41,17 +41,17 @@ but should not be selected merely because it passes the check.
 
 ## Mixing animations
 
-`primary/primary-chain-comets.gif` shows five deterministic representative
-chains spanning the first-100-draw activation-energy distribution. Each chain
+`primary/primary-chain-comets.gif` shows 50 deterministic representative
+chains spanning the first-100-draw activation-energy distribution, in ten
+one-second cohorts of five. Each chain
 produces two synchronized comets with the same `Ea`: a probability-weighted
 centroid below `ln(D0/r²) = 5.5` and one above it. The divider is a display-only
-summary of the two visible posterior regimes; it does not replace the flexible
-distribution with a two-domain model. Paths use an explicitly labeled 81-draw
-moving average so that the heavily compressed animation remains legible. Trail
-brightness increases toward the current draw, no old path is retained, chain
-starts are staggered, and each paired trajectory disappears on completion. The
-blue and orange backgrounds show the pooled posterior density of the two
-centroids across all 256 chains.
+summary of two visible regimes in the flexible distribution. Paths use an
+81-draw moving average so that the heavily compressed animation remains legible. Trail
+brightness increases toward the current draw, and each five-chain cohort is
+replaced after one second. The blue and orange backgrounds show the pooled
+posterior density of the two centroids across all 256 chains, using a screen-
+aspect-corrected hex grid.
 
 `primary/primary-chain-contraction.gif` plots the running mean of every chain in
 the same plane. Its right panels use the exact rank/folded R-hat and bulk-ESS

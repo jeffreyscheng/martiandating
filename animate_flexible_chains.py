@@ -45,8 +45,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--fps", type=int, default=12)
     parser.add_argument("--seconds", type=float, default=10.0)
-    parser.add_argument("--trail-frames", type=int, default=22)
-    parser.add_argument("--smoothing-draws", type=int, default=31)
+    parser.add_argument("--trail-frames", type=int, default=12)
+    parser.add_argument("--smoothing-draws", type=int, default=81)
     parser.add_argument("--domain-split", type=float, default=5.5)
     parser.add_argument(
         "--only", choices=("both", "comets", "contraction"), default="both"
@@ -149,7 +149,7 @@ def representative_chains(ea: np.ndarray, count: int = 5) -> np.ndarray:
     """Select deterministic chains spanning the first-100-draw Ea distribution."""
     initial = ea[: min(100, len(ea))].mean(axis=0)
     order = np.argsort(initial, kind="stable")
-    ranks = np.linspace(0.08, 0.92, count)
+    ranks = np.linspace(0.02, 0.98, count)
     return order[np.rint(ranks * (len(order) - 1)).astype(int)]
 
 
@@ -222,6 +222,7 @@ def render_comets(
     slow_centroid: np.ndarray,
     fast_centroid: np.ndarray,
     domain_split: float,
+    max_rhat: float,
     output_dir: Path,
     fps: int,
     seconds: float,
@@ -230,7 +231,7 @@ def render_comets(
 ) -> tuple[Path, Path]:
     plt.rcParams.update({"font.family": "DejaVu Sans", "text.color": TEXT})
     fig, axis = plt.subplots(figsize=(10.2, 6.2), facecolor=BG)
-    fig.subplots_adjust(left=0.105, right=0.965, bottom=0.14, top=0.80)
+    fig.subplots_adjust(left=0.105, right=0.965, bottom=0.12, top=0.86)
     style_axis(axis)
     axis.set_xlabel("shared activation energy  Ea  (kJ/mol)")
     axis.set_ylabel("domain diffusion scale  ln(D₀/r²)")
@@ -242,7 +243,7 @@ def render_comets(
     axis.hexbin(
         ea[::background_stride].ravel(),
         slow_centroid[::background_stride].ravel(),
-        gridsize=54,
+        gridsize=(68, 24),
         cmap="Blues",
         mincnt=1,
         bins="log",
@@ -252,7 +253,7 @@ def render_comets(
     axis.hexbin(
         ea[::background_stride].ravel(),
         fast_centroid[::background_stride].ravel(),
-        gridsize=54,
+        gridsize=(68, 24),
         cmap="Oranges",
         mincnt=1,
         bins="log",
@@ -283,7 +284,7 @@ def render_comets(
         fontweight="bold",
     )
 
-    selected = representative_chains(ea, 5)
+    selected = representative_chains(ea, 50)
     chain_colors = np.asarray(["#62b6f0", "#60d2a6", "#f1c75b", "#ee8969", "#b18ae8"])
     legend_handles = [
         Line2D(
@@ -294,9 +295,9 @@ def render_comets(
             markerfacecolor=color,
             markeredgecolor="none",
             markersize=6,
-            label=f"chain {chain + 1}",
+            label=f"trajectory {index + 1}",
         )
-        for chain, color in zip(selected, chain_colors)
+        for index, color in enumerate(chain_colors)
     ]
     legend_handles.extend(
         [
@@ -323,13 +324,14 @@ def render_comets(
     smooth_slow = moving_average(slow_centroid[:, selected], smoothing_draws)
     smooth_fast = moving_average(fast_centroid[:, selected], smoothing_draws)
 
-    # Five chains enter one at a time, then overlap for most of the animation.
-    # Each traverses all retained draws and vanishes as soon as it completes.
-    life_frames = max(36, round(seconds * fps))
-    entry_gap = max(3, round(0.55 * fps))
-    pause_frames = max(3, round(0.45 * fps))
-    frame_count = life_frames + entry_gap * (len(selected) - 1) + pause_frames
-    draw_lookup = np.linspace(0, len(ea) - 1, life_frames, dtype=int)
+    # Ten one-second cohorts, five chains per cohort. Each chain traverses all
+    # retained draws, then its paired comets disappear before the next cohort.
+    cohort_count = 10
+    chains_per_cohort = 5
+    frame_count = round(seconds * fps)
+    cohort_frames = frame_count // cohort_count
+    frame_count = cohort_frames * cohort_count
+    draw_lookup = np.linspace(0, len(ea) - 1, cohort_frames, dtype=int)
 
     collections = []
     slow_heads = []
@@ -352,66 +354,52 @@ def render_comets(
         fast_heads.append(fast_head)
 
     fig.suptitle(
-        "paired diffusion regimes share one activation energy",
+        f"Our NUTS sampler mixes well with R-hat {max_rhat:.4f}",
         x=0.105,
-        y=0.945,
+        y=0.96,
         ha="left",
         fontsize=16,
         fontweight="bold",
     )
-    fig.text(
-        0.105,
-        0.885,
-        "five representative chains · two synchronized comets per chain · old trajectory segments disappear",
-        color=MUTED,
-        fontsize=9.5,
-    )
-    status = fig.text(0.105, 0.055, "", color=MUTED, fontsize=9.3)
 
     def update(frame: int):
-        active = 0
-        progress = []
-        artists = [status]
-        for index in range(len(selected)):
-            local = frame - index * entry_gap
+        cohort = min(frame // cohort_frames, cohort_count - 1)
+        local = frame % cohort_frames
+        cohort_start = cohort * chains_per_cohort
+        draw = int(draw_lookup[local])
+        start_local = max(0, local - trail_frames + 1)
+        local_indices = np.arange(start_local, local + 1)
+        draws = draw_lookup[local_indices]
+        artists = []
+        for index in range(chains_per_cohort):
             slow_line, fast_line = collections[index]
-            if local < 0 or local >= life_frames:
-                slow_line.set_segments([])
-                fast_line.set_segments([])
-                slow_heads[index].set_data([], [])
-                fast_heads[index].set_data([], [])
-            else:
-                active += 1
-                start_local = max(0, local - trail_frames + 1)
-                local_indices = np.arange(start_local, local + 1)
-                draws = draw_lookup[local_indices]
-                color = chain_colors[index]
-                slow_segments, slow_colors, slow_widths = fading_segments(
-                    smooth_ea[draws, index], smooth_slow[draws, index], color
-                )
-                fast_segments, fast_colors, fast_widths = fading_segments(
-                    smooth_ea[draws, index], smooth_fast[draws, index], color
-                )
-                slow_line.set_segments(slow_segments)
-                slow_line.set_color(slow_colors)
-                slow_line.set_linewidths(slow_widths)
-                fast_line.set_segments(fast_segments)
-                fast_line.set_color(fast_colors)
-                fast_line.set_linewidths(fast_widths)
-                draw = int(draw_lookup[local])
-                slow_heads[index].set_data(
-                    [smooth_ea[draw, index]], [smooth_slow[draw, index]]
-                )
-                fast_heads[index].set_data(
-                    [smooth_ea[draw, index]], [smooth_fast[draw, index]]
-                )
-                progress.append(f"{selected[index] + 1}: {draw + 1:,}")
+            selected_index = cohort_start + index
+            color = chain_colors[index]
+            slow_segments, slow_colors, slow_widths = fading_segments(
+                smooth_ea[draws, selected_index],
+                smooth_slow[draws, selected_index],
+                color,
+            )
+            fast_segments, fast_colors, fast_widths = fading_segments(
+                smooth_ea[draws, selected_index],
+                smooth_fast[draws, selected_index],
+                color,
+            )
+            slow_line.set_segments(slow_segments)
+            slow_line.set_color(slow_colors)
+            slow_line.set_linewidths(slow_widths)
+            fast_line.set_segments(fast_segments)
+            fast_line.set_color(fast_colors)
+            fast_line.set_linewidths(fast_widths)
+            slow_heads[index].set_data(
+                [smooth_ea[draw, selected_index]],
+                [smooth_slow[draw, selected_index]],
+            )
+            fast_heads[index].set_data(
+                [smooth_ea[draw, selected_index]],
+                [smooth_fast[draw, selected_index]],
+            )
             artists.extend((slow_line, fast_line, slow_heads[index], fast_heads[index]))
-        status.set_text(
-            f"{active} active chains   ·   retained draw by chain  "
-            + ("  |  ".join(progress) if progress else "complete")
-            + f"   ·   {smoothing_draws}-draw moving-average display path"
-        )
         return artists
 
     movie = animation.FuncAnimation(
@@ -605,6 +593,7 @@ def main() -> None:
             slow_centroid,
             fast_centroid,
             args.domain_split,
+            checkpoints[-1]["rhat"],
             output_dir,
             args.fps,
             args.seconds,
