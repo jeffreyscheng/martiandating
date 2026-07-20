@@ -91,6 +91,13 @@ and at most 0.10°C at the central-interval endpoints. The 20-, 28-, and 36-bin
 grids and the rougher prior give similar recent-event limits. Monte Carlo error
 on all reported primary quantiles is below 0.09°C.
 
+`primary/diffusion_distribution.png` plots posterior mass on the flexible grid.
+Its orange, right-axis stems reproduce the Shuster–Weiss two-domain reference:
+97% HRD at `ln(D0/r²) = 5.7` and 3% LRD at `ln(D0/r²) = 9.0`.
+`primary/posterior_predictive.png` shows the 90% replicated-data interval used
+for the 14/18 coverage check, rather than only parameter uncertainty in the
+mean release schedule.
+
 ## Thermal interpretation
 
 The thermal transform uses a 1.3 Ga rock age, a 1.248 Ga potassium-40 half-life,

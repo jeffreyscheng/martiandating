@@ -20,6 +20,10 @@ from run_flexible_mdd import EA_MEAN, EA_SD, R_GAS, numpy_transform
 
 SECONDS_PER_MY = 1e6 * 365.25 * 24 * 3600
 K40_HALF_LIFE_MY = 1248.0
+SW_HRD_LOG_DIFFUSION_SCALE = 5.7
+SW_LRD_LOG_DIFFUSION_SCALE = 9.0
+SW_HRD_FRACTION = 0.97
+SW_LRD_FRACTION = 0.03
 
 
 def parse_args() -> argparse.Namespace:
@@ -208,12 +212,58 @@ def draw_distribution_plot(
     flat = weights.reshape(-1, weights.shape[-1])
     low, median, high = np.quantile(flat, [0.025, 0.5, 0.975], axis=0)
     fig, ax = plt.subplots(figsize=(8.4, 4.8))
-    ax.fill_between(grid, low, high, color="#8fb8df", alpha=0.5, label="central 95%")
+    ax.fill_between(grid, low, high, color="#8fb8df", alpha=0.5, label="posterior central 95%")
     ax.plot(grid, median, color="#163b59", lw=2, label="posterior median")
     ax.set_xlabel(r"$\ln(D_0/r^2)$")
     ax.set_ylabel("probability mass per grid bin")
-    ax.set_title("posterior diffusion-scale distribution")
-    ax.legend(frameon=False)
+    ax.set_title("diffusion-scale posterior and Shuster–Weiss domains")
+    ax.set_ylim(0, 0.31)
+
+    reference_ax = ax.twinx()
+    reference_ax.vlines(
+        [SW_HRD_LOG_DIFFUSION_SCALE, SW_LRD_LOG_DIFFUSION_SCALE],
+        0,
+        [SW_HRD_FRACTION, SW_LRD_FRACTION],
+        color="#d95f36",
+        lw=2,
+        linestyles="--",
+        label="Shuster–Weiss two-domain fit",
+    )
+    reference_ax.scatter(
+        [SW_HRD_LOG_DIFFUSION_SCALE, SW_LRD_LOG_DIFFUSION_SCALE],
+        [SW_HRD_FRACTION, SW_LRD_FRACTION],
+        color="#d95f36",
+        s=32,
+        zorder=4,
+    )
+    reference_ax.annotate(
+        "HRD 97%",
+        (SW_HRD_LOG_DIFFUSION_SCALE, SW_HRD_FRACTION),
+        xytext=(-8, -4),
+        textcoords="offset points",
+        ha="right",
+        va="top",
+        color="#a23f22",
+        fontsize=8,
+    )
+    reference_ax.annotate(
+        "LRD 3%",
+        (SW_LRD_LOG_DIFFUSION_SCALE, SW_LRD_FRACTION),
+        xytext=(7, 3),
+        textcoords="offset points",
+        ha="left",
+        va="bottom",
+        color="#a23f22",
+        fontsize=8,
+    )
+    reference_ax.set_ylim(0, 1.04)
+    reference_ax.set_ylabel("Shuster–Weiss domain fraction", color="#a23f22")
+    reference_ax.tick_params(axis="y", colors="#a23f22")
+    reference_ax.spines["right"].set_color("#a23f22")
+
+    handles, labels = ax.get_legend_handles_labels()
+    reference_handles, reference_labels = reference_ax.get_legend_handles_labels()
+    ax.legend(handles + reference_handles, labels + reference_labels, frameon=False)
     ax.grid(alpha=0.12)
     fig.tight_layout()
     fig.savefig(result_dir / "diffusion_distribution.png", dpi=180)
@@ -226,12 +276,22 @@ def draw_ppc_plot(
     observed: np.ndarray,
     sigma: np.ndarray,
     predictions: np.ndarray,
+    replicated: np.ndarray,
     likelihood_mask: np.ndarray,
 ) -> None:
     flat = predictions.reshape(-1, predictions.shape[-1])
-    low, median, high = np.quantile(flat, [0.025, 0.5, 0.975], axis=0)
+    median = np.quantile(flat, 0.5, axis=0)
+    replicated_flat = replicated.reshape(-1, replicated.shape[-1])
+    low, high = np.quantile(replicated_flat, [0.05, 0.95], axis=0)
     fig, ax = plt.subplots(figsize=(8.4, 4.8))
-    ax.fill_between(temperatures_c, low, high, color="#8fb8df", alpha=0.5)
+    ax.fill_between(
+        temperatures_c,
+        low,
+        high,
+        color="#8fb8df",
+        alpha=0.5,
+        label="90% posterior-predictive interval",
+    )
     ax.plot(temperatures_c, median, color="#163b59", lw=2, label="posterior prediction")
     ax.errorbar(
         temperatures_c[likelihood_mask],
@@ -401,6 +461,7 @@ def main() -> None:
         observed,
         sigma,
         predictions,
+        replicated,
         likelihood_mask,
     )
     draw_temperature_plot(args.result_dir, recent_limits)
