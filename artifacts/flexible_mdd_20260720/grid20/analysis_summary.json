@@ -1,0 +1,113 @@
+{
+  "posterior_subset": {
+    "draws_per_chain": 100,
+    "chains": 256,
+    "samples": 25600,
+    "relative_sigma": 0.1
+  },
+  "posterior_predictive": {
+    "standardized_residual_rms": 1.3854276194372248,
+    "maximum_absolute_standardized_median_residual": 2.496182771936475,
+    "observations_in_90pct_predictive_interval": 14,
+    "likelihood_observations": 18
+  },
+  "temperature": {
+    "duration_10my_end_0my": {
+      "central_95_and_median": [
+        -2.564423420531625,
+        7.003245208841236,
+        15.525741231191999
+      ],
+      "quantile_mcse_c": [
+        0.07693488514720166,
+        0.025913431584882154,
+        0.07437654243359933
+      ],
+      "probability_above_freezing": 0.925859375
+    },
+    "duration_100my_end_0my": {
+      "central_95_and_median": [
+        -14.114190972226197,
+        -4.760188597435899,
+        3.582541600572423
+      ],
+      "quantile_mcse_c": [
+        0.06920774210280231,
+        0.02362166687276386,
+        0.08018724131711161
+      ],
+      "probability_above_freezing": 0.1029296875
+    },
+    "duration_200my_end_0my": {
+      "central_95_and_median": [
+        -17.273278443128675,
+        -7.973357923469848,
+        0.31965988395142203
+      ],
+      "quantile_mcse_c": [
+        0.06873558303554922,
+        0.023245171588554162,
+        0.08227915873530472
+      ],
+      "probability_above_freezing": 0.0290234375
+    },
+    "duration_500my_end_0my": {
+      "central_95_and_median": [
+        -20.974953953378872,
+        -11.742160120968492,
+        -3.5012622210513284
+      ],
+      "quantile_mcse_c": [
+        0.07458058608452858,
+        0.021979180280004722,
+        0.06925881904933918
+      ],
+      "probability_above_freezing": 0.0019921875
+    },
+    "duration_100my_end_250my": {
+      "central_95_and_median": [
+        -12.542214874350748,
+        -3.1659974217291165,
+        5.199542619019439
+      ],
+      "quantile_mcse_c": [
+        0.07805533567846461,
+        0.022747029380745236,
+        0.07442052385891905
+      ],
+      "probability_above_freezing": 0.1685546875
+    },
+    "duration_100my_end_500my": {
+      "central_95_and_median": [
+        -10.322937537355301,
+        -0.9167809508994651,
+        7.474651519669339
+      ],
+      "quantile_mcse_c": [
+        0.07023944781165141,
+        0.02438589848784611,
+        0.07746727917535016
+      ],
+      "probability_above_freezing": 0.377890625
+    },
+    "duration_100my_end_1000my": {
+      "central_95_and_median": [
+        -0.3858212113925674,
+        9.150158185912005,
+        17.651229448681523
+      ],
+      "quantile_mcse_c": [
+        0.07527699464957396,
+        0.022934599339145424,
+        0.07383349009329108
+      ],
+      "probability_above_freezing": 0.969375
+    }
+  },
+  "thermal_model": {
+    "rock_age_my": 1300.0,
+    "k40_half_life_my": 1248.0,
+    "loss_threshold": 0.01,
+    "notes": "Constant-temperature event; integrates radiogenic production during the event and post-event regrowth through the present-day inventory denominator."
+  }
+}
