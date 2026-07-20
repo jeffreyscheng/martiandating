@@ -23,7 +23,6 @@ import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.collections import LineCollection
-from matplotlib.lines import Line2D
 
 
 BG = "#080a0f"
@@ -43,9 +42,9 @@ def parse_args() -> argparse.Namespace:
         default=Path("results/flexible/primary_flex28_seed20260720"),
     )
     parser.add_argument("--output-dir", type=Path)
-    parser.add_argument("--fps", type=int, default=12)
+    parser.add_argument("--fps", type=int, default=20)
     parser.add_argument("--seconds", type=float, default=10.0)
-    parser.add_argument("--trail-frames", type=int, default=12)
+    parser.add_argument("--trail-frames", type=int, default=20)
     parser.add_argument("--smoothing-draws", type=int, default=81)
     parser.add_argument("--domain-split", type=float, default=5.5)
     parser.add_argument(
@@ -126,6 +125,36 @@ def style_axis(axis: plt.Axes) -> None:
     axis.yaxis.label.set_color(TEXT)
     for spine in axis.spines.values():
         spine.set_color(GRID)
+
+
+def hex_screen_ratio(collection) -> float:
+    """Width/height of one rendered hexagon in display pixels."""
+    vertices = collection.get_paths()[0].vertices
+    pixels = collection.get_transform().transform(vertices)
+    return float(np.ptp(pixels[:, 0]) / np.ptp(pixels[:, 1]))
+
+
+def regular_hex_gridsize(
+    axis: plt.Axes, x: np.ndarray, y: np.ndarray, vertical_bins: int = 24
+) -> tuple[int, int]:
+    """Choose grid counts that make flat-top hexagons regular on screen."""
+    trial_horizontal = 60
+    extent = (*axis.get_xlim(), *axis.get_ylim())
+    probe = axis.hexbin(
+        x,
+        y,
+        gridsize=(trial_horizontal, vertical_bins),
+        extent=extent,
+        mincnt=1,
+        alpha=0,
+        linewidths=0,
+    )
+    axis.figure.canvas.draw()
+    measured = hex_screen_ratio(probe)
+    probe.remove()
+    target = 2 / np.sqrt(3)
+    horizontal_bins = max(4, round(trial_horizontal * measured / target))
+    return horizontal_bins, vertical_bins
 
 
 def checkpoint_at(checkpoints: list[dict[str, float]], draw: int):
@@ -240,25 +269,43 @@ def render_comets(
     axis.set_ylim(*padded_limits(combined))
 
     background_stride = max(1, len(ea) // 800)
-    axis.hexbin(
-        ea[::background_stride].ravel(),
-        slow_centroid[::background_stride].ravel(),
-        gridsize=(68, 24),
+    background_ea = ea[::background_stride].ravel()
+    background_slow = slow_centroid[::background_stride].ravel()
+    background_fast = fast_centroid[::background_stride].ravel()
+    hex_extent = (*axis.get_xlim(), *axis.get_ylim())
+    hex_grid = regular_hex_gridsize(
+        axis,
+        np.concatenate((background_ea, background_ea)),
+        np.concatenate((background_slow, background_fast)),
+    )
+    slow_hexes = axis.hexbin(
+        background_ea,
+        background_slow,
+        gridsize=hex_grid,
+        extent=hex_extent,
         cmap="Blues",
         mincnt=1,
         bins="log",
         alpha=0.24,
         linewidths=0,
     )
-    axis.hexbin(
-        ea[::background_stride].ravel(),
-        fast_centroid[::background_stride].ravel(),
-        gridsize=(68, 24),
+    fast_hexes = axis.hexbin(
+        background_ea,
+        background_fast,
+        gridsize=hex_grid,
+        extent=hex_extent,
         cmap="Oranges",
         mincnt=1,
         bins="log",
         alpha=0.20,
         linewidths=0,
+    )
+    fig.canvas.draw()
+    slow_ratio = hex_screen_ratio(slow_hexes)
+    fast_ratio = hex_screen_ratio(fast_hexes)
+    print(
+        f"Hex grid {hex_grid}: screen width/height "
+        f"{slow_ratio:.4f} / {fast_ratio:.4f}; regular target {2 / np.sqrt(3):.4f}"
     )
     axis.axhspan(axis.get_ylim()[0], domain_split, color="#408fca", alpha=0.035)
     axis.axhspan(domain_split, axis.get_ylim()[1], color="#d88d3e", alpha=0.035)
@@ -284,74 +331,31 @@ def render_comets(
         fontweight="bold",
     )
 
-    selected = representative_chains(ea, 50)
-    chain_colors = np.asarray(["#62b6f0", "#60d2a6", "#f1c75b", "#ee8969", "#b18ae8"])
-    legend_handles = [
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            linestyle="none",
-            markerfacecolor=color,
-            markeredgecolor="none",
-            markersize=6,
-            label=f"trajectory {index + 1}",
-        )
-        for index, color in enumerate(chain_colors)
-    ]
-    legend_handles.extend(
-        [
-            Line2D(
-                [0], [0], marker="o", color="white", markerfacecolor="none",
-                linestyle="none", markersize=6, label="slower centroid"
-            ),
-            Line2D(
-                [0], [0], marker="D", color="white", markerfacecolor="none",
-                linestyle="none", markersize=5, label="faster centroid"
-            ),
-        ]
-    )
-    axis.legend(
-        handles=legend_handles,
-        loc="upper right",
-        frameon=False,
-        ncol=4,
-        fontsize=7.6,
-        labelcolor=MUTED,
-    )
+    trajectory_seconds = 1.0
+    start_interval_seconds = 0.05
+    trajectory_count = round(seconds / start_interval_seconds)
+    selected = representative_chains(ea, trajectory_count)
+    chain_colors = matplotlib.colormaps["turbo"](np.linspace(0.08, 0.92, 20))
 
     smooth_ea = moving_average(ea[:, selected], smoothing_draws)
     smooth_slow = moving_average(slow_centroid[:, selected], smoothing_draws)
     smooth_fast = moving_average(fast_centroid[:, selected], smoothing_draws)
 
-    # Ten one-second cohorts, five chains per cohort. Each chain traverses all
-    # retained draws, then its paired comets disappear before the next cohort.
-    cohort_count = 10
-    chains_per_cohort = 5
-    frame_count = round(seconds * fps)
-    cohort_frames = frame_count // cohort_count
-    frame_count = cohort_frames * cohort_count
-    draw_lookup = np.linspace(0, len(ea) - 1, cohort_frames, dtype=int)
+    life_frames = round(trajectory_seconds * fps)
+    start_gap_frames = round(start_interval_seconds * fps)
+    if start_gap_frames < 1 or not np.isclose(start_gap_frames / fps, start_interval_seconds):
+        raise ValueError("--fps must represent 0.05-second starts exactly (use 20 or 40)")
+    frame_count = start_gap_frames * (len(selected) - 1) + life_frames
+    draw_lookup = np.linspace(0, len(ea) - 1, life_frames, dtype=int)
+    maximum_active = int(np.ceil(life_frames / start_gap_frames))
 
     collections = []
-    slow_heads = []
-    fast_heads = []
-    for color in chain_colors:
+    for _ in range(maximum_active):
         slow_line = LineCollection([], linewidths=[])
         fast_line = LineCollection([], linewidths=[])
         axis.add_collection(slow_line)
         axis.add_collection(fast_line)
-        slow_head, = axis.plot(
-            [], [], marker="o", markersize=5.5, markerfacecolor="#ffffff",
-            markeredgecolor=color, markeredgewidth=1.5, linestyle="none", zorder=4
-        )
-        fast_head, = axis.plot(
-            [], [], marker="D", markersize=5.0, markerfacecolor="#ffffff",
-            markeredgecolor=color, markeredgewidth=1.5, linestyle="none", zorder=4
-        )
         collections.append((slow_line, fast_line))
-        slow_heads.append(slow_head)
-        fast_heads.append(fast_head)
 
     fig.suptitle(
         f"Our NUTS sampler mixes well with R-hat {max_rhat:.4f}",
@@ -363,18 +367,26 @@ def render_comets(
     )
 
     def update(frame: int):
-        cohort = min(frame // cohort_frames, cohort_count - 1)
-        local = frame % cohort_frames
-        cohort_start = cohort * chains_per_cohort
-        draw = int(draw_lookup[local])
-        start_local = max(0, local - trail_frames + 1)
-        local_indices = np.arange(start_local, local + 1)
-        draws = draw_lookup[local_indices]
+        first_active = max(
+            0,
+            int(np.ceil((frame - life_frames + 1) / start_gap_frames)),
+        )
+        last_active = min(len(selected) - 1, frame // start_gap_frames)
+        active_indices = list(range(first_active, last_active + 1))
         artists = []
-        for index in range(chains_per_cohort):
-            slow_line, fast_line = collections[index]
-            selected_index = cohort_start + index
-            color = chain_colors[index]
+        for slot, (slow_line, fast_line) in enumerate(collections):
+            if slot >= len(active_indices):
+                slow_line.set_segments([])
+                fast_line.set_segments([])
+                artists.extend((slow_line, fast_line))
+                continue
+            selected_index = active_indices[slot]
+            local = frame - selected_index * start_gap_frames
+            render_local = max(1, local)
+            start_local = max(0, render_local - trail_frames + 1)
+            local_indices = np.arange(start_local, render_local + 1)
+            draws = draw_lookup[local_indices]
+            color = chain_colors[selected_index % len(chain_colors)]
             slow_segments, slow_colors, slow_widths = fading_segments(
                 smooth_ea[draws, selected_index],
                 smooth_slow[draws, selected_index],
@@ -391,15 +403,7 @@ def render_comets(
             fast_line.set_segments(fast_segments)
             fast_line.set_color(fast_colors)
             fast_line.set_linewidths(fast_widths)
-            slow_heads[index].set_data(
-                [smooth_ea[draw, selected_index]],
-                [smooth_slow[draw, selected_index]],
-            )
-            fast_heads[index].set_data(
-                [smooth_ea[draw, selected_index]],
-                [smooth_fast[draw, selected_index]],
-            )
-            artists.extend((slow_line, fast_line, slow_heads[index], fast_heads[index]))
+            artists.extend((slow_line, fast_line))
         return artists
 
     movie = animation.FuncAnimation(
@@ -412,7 +416,7 @@ def render_comets(
     mp4_path = output_dir / "primary-chain-comets.mp4"
     gif_path = output_dir / "primary-chain-comets.gif"
     save_animation(movie, mp4_path, fps)
-    mp4_to_gif(mp4_path, gif_path, min(fps, 10))
+    mp4_to_gif(mp4_path, gif_path, fps)
     plt.close(fig)
     return mp4_path, gif_path
 
