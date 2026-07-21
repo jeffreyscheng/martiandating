@@ -1,4 +1,10 @@
-"""Posterior predictive and thermal-history analysis for flexible MDD runs."""
+"""Posterior predictive and legacy threshold analysis for flexible MDD runs.
+
+The temperature transform in this file is superseded by the normalized
+40Ar*/39Ar joint likelihood in ``joint_thermochronology_jax.py``. It conditions
+on an externally supplied loss threshold and must not be presented as a direct
+temperature posterior from the measured age spectrum.
+"""
 
 from __future__ import annotations
 
