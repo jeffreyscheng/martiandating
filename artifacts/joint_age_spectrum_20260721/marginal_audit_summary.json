@@ -1,0 +1,166 @@
+{
+  "targets": {
+    "old_hex": "all-extraction 39Ar normalization; legacy spherical release; laboratory likelihood only",
+    "corrected_lab": "39Ar retained through 850 C; exact spherical release; laboratory likelihood only",
+    "joint_100my_recent": "corrected laboratory likelihood plus natural radiogenic-Ar spectrum; conditioned on a recent 100 My excursion"
+  },
+  "importance_reweighting_old_to_corrected": {
+    "samples": 25600,
+    "pareto_k": 3.4438444331917113,
+    "importance_ess": 1.058548739960969,
+    "maximum_weight": 0.9716917906057333,
+    "log_likelihood_ratio_quantiles": [
+      -136.86116422306873,
+      -121.57976009709759,
+      -101.3651510670365,
+      -78.18579825899008,
+      -55.929627760411755
+    ]
+  },
+  "shared_marginals": {
+    "activation energy": {
+      "old_hex_central_95_and_median": [
+        114.51058218763151,
+        120.17563364898695,
+        126.18745939507693
+      ],
+      "corrected_lab_central_95_and_median": [
+        111.67730163942483,
+        117.3930380190687,
+        123.32312242659268
+      ],
+      "joint_100my_recent_central_95_and_median": [
+        111.48323704694334,
+        117.33810938054756,
+        123.27610314204372
+      ],
+      "overlap_old_vs_corrected": 0.5938671875000334,
+      "overlap_corrected_vs_joint": 0.9488983865685928,
+      "overlap_corrected_vs_joint_across_21_scenarios": {
+        "minimum": 0.9388327913007904,
+        "median": 0.9479299168824592,
+        "maximum": 0.9509227956093513
+      }
+    },
+    "mean diffusion scale": {
+      "old_hex_central_95_and_median": [
+        4.343075866912298,
+        5.1748796641243855,
+        5.998806118300161
+      ],
+      "corrected_lab_central_95_and_median": [
+        5.543292095469339,
+        6.370131464193271,
+        7.227921084618566
+      ],
+      "joint_100my_recent_central_95_and_median": [
+        5.521140442264919,
+        6.367664740098144,
+        7.227535484543342
+      ],
+      "overlap_old_vs_corrected": 0.162656249999999,
+      "overlap_corrected_vs_joint": 0.954689652710873,
+      "overlap_corrected_vs_joint_across_21_scenarios": {
+        "minimum": 0.9450753152868926,
+        "median": 0.9537624808576575,
+        "maximum": 0.9565760310300219
+      }
+    },
+    "diffusion-scale SD": {
+      "old_hex_central_95_and_median": [
+        1.9955273732684522,
+        2.494035805390938,
+        3.2029753421854132
+      ],
+      "corrected_lab_central_95_and_median": [
+        1.0633063025721217,
+        1.499051662752235,
+        2.0491947566030104
+      ],
+      "joint_100my_recent_central_95_and_median": [
+        1.060419863087189,
+        1.5046645833917396,
+        2.058358442330891
+      ],
+      "overlap_old_vs_corrected": 0.06210937500000035,
+      "overlap_corrected_vs_joint": 0.9563658646505915,
+      "overlap_corrected_vs_joint_across_21_scenarios": {
+        "minimum": 0.9418063063167861,
+        "median": 0.9555967757608064,
+        "maximum": 0.9574172916459812
+      }
+    },
+    "slow-region mass": {
+      "old_hex_central_95_and_median": [
+        0.4378192434486594,
+        0.5566390370761181,
+        0.6738194121564601
+      ],
+      "corrected_lab_central_95_and_median": [
+        0.0868233555241803,
+        0.21267136673464515,
+        0.502588832881065
+      ],
+      "joint_100my_recent_central_95_and_median": [
+        0.08622476844815645,
+        0.2137463981496791,
+        0.5187202460071045
+      ],
+      "overlap_old_vs_corrected": 0.07191406250000004,
+      "overlap_corrected_vs_joint": 0.9517038513269195,
+      "overlap_corrected_vs_joint_across_21_scenarios": {
+        "minimum": 0.9429177028229513,
+        "median": 0.9517038513269195,
+        "maximum": 0.9545764344745219
+      }
+    },
+    "slow-region centroid": {
+      "old_hex_central_95_and_median": [
+        1.8299210131300117,
+        3.1928445948140305,
+        4.209826801879594
+      ],
+      "corrected_lab_central_95_and_median": [
+        2.564788529027234,
+        4.284861831559201,
+        5.036670622048411
+      ],
+      "joint_100my_recent_central_95_and_median": [
+        2.549194653415733,
+        4.28903504339968,
+        5.036881624403241
+      ],
+      "overlap_old_vs_corrected": 0.395703125,
+      "overlap_corrected_vs_joint": 0.9580314029658888,
+      "overlap_corrected_vs_joint_across_21_scenarios": {
+        "minimum": 0.9458954247792491,
+        "median": 0.9575194278264721,
+        "maximum": 0.9595460226115258
+      }
+    },
+    "fast-region centroid": {
+      "old_hex_central_95_and_median": [
+        6.864736100704369,
+        7.673478675055513,
+        8.435645378569486
+      ],
+      "corrected_lab_central_95_and_median": [
+        6.3601407720892,
+        6.961570651071548,
+        7.732716393219515
+      ],
+      "joint_100my_recent_central_95_and_median": [
+        6.35898028980233,
+        6.959680246673777,
+        7.721713178740895
+      ],
+      "overlap_old_vs_corrected": 0.35468749999998656,
+      "overlap_corrected_vs_joint": 0.9522096660791587,
+      "overlap_corrected_vs_joint_across_21_scenarios": {
+        "minimum": 0.9318860715825437,
+        "median": 0.9522096660791587,
+        "maximum": 0.9540969108856788
+      }
+    }
+  }
+}

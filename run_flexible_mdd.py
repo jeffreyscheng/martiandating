@@ -78,6 +78,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--flex-scale", type=float, default=1.5)
     parser.add_argument("--relative-sigma", type=float, default=0.10)
     parser.add_argument("--minimum-temperature", type=float, default=350.0)
+    parser.add_argument(
+        "--normalization-maximum-temperature",
+        type=float,
+        help="Normalize 39Ar by releases at or below this temperature",
+    )
+    parser.add_argument(
+        "--exact-spherical-release",
+        action="store_true",
+        help="Use the converged spherical eigenmode release function",
+    )
     parser.add_argument("--target-accept", type=float, default=0.90)
     parser.add_argument("--max-doublings", type=int, default=10)
     parser.add_argument("--seed", type=int, default=20260720)
@@ -113,10 +123,20 @@ def git_value(*args: str) -> str:
         return "unavailable"
 
 
-def load_data(relative_sigma: float, minimum_temperature: float) -> DataBundle:
+def load_data(
+    relative_sigma: float,
+    minimum_temperature: float,
+    normalization_maximum_temperature: float | None = None,
+) -> DataBundle:
     path = Path("data/nakhla1_parsed_fitted.csv")
     frame = pd.read_csv(path)
-    total_ar = float(frame["39Ar"].sum())
+    normalization_mask = (
+        np.ones(len(frame), dtype=bool)
+        if normalization_maximum_temperature is None
+        else frame["Temp"].to_numpy(float)
+        <= normalization_maximum_temperature
+    )
+    total_ar = float(frame.loc[normalization_mask, "39Ar"].sum())
     timed = frame.dropna(subset=["seconds_per_extraction_step"]).copy()
     observed = timed["39Ar"].to_numpy(float) / total_ar
     measured_sigma = timed["std_39Ar"].to_numpy(float) / total_ar
@@ -152,6 +172,21 @@ def fractional_release(progress: jax.Array) -> jax.Array:
     return jnp.clip(jnp.where(progress < 0.3, short, long), 0.0, 1.0)
 
 
+def exact_fractional_release(
+    progress: jax.Array, mode_count: int = 64
+) -> jax.Array:
+    progress = jnp.asarray(progress)
+    safe_progress = jnp.maximum(progress, 1e-300)
+    short = 6.0 * jnp.sqrt(safe_progress / jnp.pi) - 3.0 * progress
+    n = jnp.arange(1, mode_count + 1, dtype=progress.dtype)
+    mode_weights = 6.0 / (jnp.pi**2 * n**2)
+    eigenvalues = jnp.pi**2 * n**2
+    long = 1.0 - jnp.sum(
+        mode_weights * jnp.exp(-progress[..., None] * eigenvalues), axis=-1
+    )
+    return jnp.clip(jnp.where(progress < 0.05, short, long), 0.0, 1.0)
+
+
 def build_target(args: argparse.Namespace, data: DataBundle):
     grid_np = np.linspace(args.grid_min, args.grid_max, args.bins)
     basis_np = smooth_basis(grid_np, args.kernel_length)
@@ -178,7 +213,12 @@ def build_target(args: argparse.Namespace, data: DataBundle):
         rates = jnp.exp(grid[:, None] - ea * 1e3 / (R_GAS * temperatures_k[None, :]))
         progress = rates * durations_s[None, :]
         cumulative = jnp.cumsum(progress, axis=1)
-        release = fractional_release(cumulative)
+        release_function = (
+            exact_fractional_release
+            if getattr(args, "exact_spherical_release", False)
+            else fractional_release
+        )
+        release = release_function(cumulative)
         increments = jnp.diff(release, axis=1, prepend=jnp.zeros((args.bins, 1)))
         return weights @ increments
 
@@ -474,7 +514,11 @@ def main() -> None:
     output_dir = args.results_dir / args.tag
     chunks_dir = output_dir / "chunks"
     chunks_dir.mkdir(parents=True, exist_ok=True)
-    data = load_data(args.relative_sigma, args.minimum_temperature)
+    data = load_data(
+        args.relative_sigma,
+        args.minimum_temperature,
+        args.normalization_maximum_temperature,
+    )
     grid, basis, base_logits, transform, forward_all, native_log_density = build_target(args, data)
     correctness_checks(
         args, data, grid, basis, transform, forward_all, native_log_density

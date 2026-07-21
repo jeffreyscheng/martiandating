@@ -18,8 +18,18 @@ posterior probability above 0 C is
 
 Sampler diagnostics: max R-hat 1.0010; minimum bulk/tail ESS 83413/96173; minimum cell responsibility ESS 63341; divergences 0; minimum BFMI 0.908.
 
+The hex-comet animation in the preceding flexible-MDD artifact came from a
+different laboratory target: it normalized by all extracted 39Ar and used the
+legacy spherical-release approximation. Importance reuse fails decisively
+(Pareto k `3.44`, ESS
+`1.06` of 25,600). A
+separate corrected laboratory-only control passed its sampler gates. Its six
+shared diffusion/activation-energy marginals overlap the joint conditionals by
+at least `93.2%` across all 21 timing cells.
+See `marginal_audit_summary.json` and the two marginal-comparison figures.
+
 The cold lower tail is prior-dominated. Event timing changes the upper
-constraint and is reported in `joint_temperature_timing.png`. This is a Nakhla
+constraint and is reported in `joint_temperature_density_grid.png`. This is a Nakhla
 analysis covering the last 1.3 Gy; it does not test Noachian denudation or
 replace the ALH84001 part of Shuster and Weiss (2005).
 

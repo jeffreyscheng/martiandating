@@ -12,6 +12,8 @@ import numpy as np
 RESULTS = Path("results/joint")
 RUN = RESULTS / "ensemble_grid_production"
 ANALYSIS = RESULTS / "ensemble_analysis"
+MARGINAL_AUDIT = RESULTS / "marginal_audit"
+CORRECTED_LAB = Path("results/flexible/corrected_lab_control_ta98")
 OUTPUT = Path("artifacts/joint_age_spectrum_20260721")
 
 
@@ -44,6 +46,20 @@ def main() -> None:
     shutil.copy2("JOINT_AGE_SPECTRUM_MODEL.md", OUTPUT / "MODEL.md")
     for figure in ANALYSIS.glob("*.png"):
         shutil.copy2(figure, OUTPUT / figure.name)
+    copy_json(
+        MARGINAL_AUDIT / "summary.json",
+        OUTPUT / "marginal_audit_summary.json",
+    )
+    for figure in MARGINAL_AUDIT.glob("*.png"):
+        shutil.copy2(figure, OUTPUT / figure.name)
+    copy_json(
+        CORRECTED_LAB / "manifest.json",
+        OUTPUT / "corrected_lab_manifest.json",
+    )
+    copy_json(
+        CORRECTED_LAB / "final_diagnostics.json",
+        OUTPUT / "corrected_lab_diagnostics.json",
+    )
 
     posterior = np.load(RUN / "posterior.npz")
     selected_draws = np.linspace(
@@ -64,8 +80,28 @@ def main() -> None:
             )
         },
     )
+    corrected = np.load(CORRECTED_LAB / "posterior.npz")
+    corrected_draws = np.linspace(
+        0, corrected["position"].shape[0] - 1, 100, dtype=int
+    )
+    np.savez_compressed(
+        OUTPUT / "corrected_lab_compact_posterior.npz",
+        position=corrected["position"][corrected_draws],
+        sampler_stats=corrected["sampler_stats"][corrected_draws],
+        grid=corrected["grid"],
+        basis=corrected["basis"],
+        base_logits=corrected["base_logits"],
+    )
 
     primary = primary_cell(run_summary)
+    marginal_audit = json.loads(
+        (MARGINAL_AUDIT / "summary.json").read_text()
+    )
+    reweighting = marginal_audit["importance_reweighting_old_to_corrected"]
+    scenario_overlap_minimum = min(
+        values["overlap_corrected_vs_joint_across_21_scenarios"]["minimum"]
+        for values in marginal_audit["shared_marginals"].values()
+    )
     interval = primary["temperature_c"]["central_95_and_median"]
     diagnostics = (
         f"max R-hat {analysis_summary['all_parameter_max_rhat']:.4f}; "
@@ -97,8 +133,18 @@ posterior probability above 0 C is
 
 Sampler diagnostics: {diagnostics}.
 
+The hex-comet animation in the preceding flexible-MDD artifact came from a
+different laboratory target: it normalized by all extracted 39Ar and used the
+legacy spherical-release approximation. Importance reuse fails decisively
+(Pareto k `{reweighting['pareto_k']:.2f}`, ESS
+`{reweighting['importance_ess']:.2f}` of {reweighting['samples']:,}). A
+separate corrected laboratory-only control passed its sampler gates. Its six
+shared diffusion/activation-energy marginals overlap the joint conditionals by
+at least `{100 * scenario_overlap_minimum:.1f}%` across all 21 timing cells.
+See `marginal_audit_summary.json` and the two marginal-comparison figures.
+
 The cold lower tail is prior-dominated. Event timing changes the upper
-constraint and is reported in `joint_temperature_timing.png`. This is a Nakhla
+constraint and is reported in `joint_temperature_density_grid.png`. This is a Nakhla
 analysis covering the last 1.3 Gy; it does not test Noachian denudation or
 replace the ALH84001 part of Shuster and Weiss (2005).
 

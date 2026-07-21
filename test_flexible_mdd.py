@@ -9,7 +9,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from run_flexible_mdd import build_target, load_data, smooth_basis
+from run_flexible_mdd import (
+    build_target,
+    exact_fractional_release,
+    load_data,
+    smooth_basis,
+)
 from analyze_flexible_mdd import cohort_loss, temperature_limit
 
 jax.config.update("jax_enable_x64", True)
@@ -45,6 +50,20 @@ class FlexibleMDDTests(unittest.TestCase):
         self.assertAlmostEqual(
             float(np.sqrt(np.mean(np.sum(basis**2, axis=1)))), 1.0
         )
+
+    def test_retained_normalization_matches_joint_target(self):
+        data = load_data(0.10, 350.0, 850.0)
+        self.assertAlmostEqual(data.total_ar, 163.6722)
+        self.assertAlmostEqual(
+            data.observed_fraction[data.likelihood_mask].sum(),
+            0.8151598132680097,
+        )
+
+    def test_exact_release_matches_converged_spherical_series(self):
+        progress = jnp.geomspace(1e-5, 2.0, 80)
+        release_64 = np.asarray(exact_fractional_release(progress, 64))
+        release_256 = np.asarray(exact_fractional_release(progress, 256))
+        np.testing.assert_allclose(release_64, release_256, atol=1e-12)
 
     def test_forward_model_is_absolute_not_window_normalized(self):
         _, _, _, transform, forward_all, _ = self.target
