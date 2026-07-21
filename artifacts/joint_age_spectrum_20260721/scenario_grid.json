@@ -1,0 +1,23 @@
+[
+  {"duration_my": 10, "start_age_before_present_my": 10},
+  {"duration_my": 10, "start_age_before_present_my": 250},
+  {"duration_my": 10, "start_age_before_present_my": 500},
+  {"duration_my": 10, "start_age_before_present_my": 750},
+  {"duration_my": 10, "start_age_before_present_my": 1000},
+  {"duration_my": 100, "start_age_before_present_my": 100},
+  {"duration_my": 100, "start_age_before_present_my": 250},
+  {"duration_my": 100, "start_age_before_present_my": 500},
+  {"duration_my": 100, "start_age_before_present_my": 750},
+  {"duration_my": 100, "start_age_before_present_my": 1000},
+  {"duration_my": 200, "start_age_before_present_my": 200},
+  {"duration_my": 200, "start_age_before_present_my": 400},
+  {"duration_my": 200, "start_age_before_present_my": 600},
+  {"duration_my": 200, "start_age_before_present_my": 800},
+  {"duration_my": 200, "start_age_before_present_my": 1000},
+  {"duration_my": 500, "start_age_before_present_my": 500},
+  {"duration_my": 500, "start_age_before_present_my": 625},
+  {"duration_my": 500, "start_age_before_present_my": 750},
+  {"duration_my": 500, "start_age_before_present_my": 875},
+  {"duration_my": 500, "start_age_before_present_my": 1000},
+  {"duration_my": 1300, "start_age_before_present_my": 1300}
+]
