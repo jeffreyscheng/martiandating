@@ -144,7 +144,7 @@ at least `{100 * scenario_overlap_minimum:.1f}%` across all 21 timing cells.
 See `marginal_audit_summary.json` and the two marginal-comparison figures.
 
 The cold lower tail is prior-dominated. Event timing changes the upper
-constraint and is reported in `joint_temperature_density_grid.png`. This is a Nakhla
+constraint and is tabulated in `analysis_summary.json`. This is a Nakhla
 analysis covering the last 1.3 Gy; it does not test Noachian denudation or
 replace the ALH84001 part of Shuster and Weiss (2005).
 

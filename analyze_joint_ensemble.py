@@ -16,7 +16,6 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.ndimage import gaussian_filter1d
 
 from joint_thermochronology_jax import build_joint_target
 
@@ -230,6 +229,7 @@ def draw_temperature_violins(
         positions, ["10 My", "100 My", "200 My", "500 My", "1.3 Gy"]
     )
     axis.set_ylabel("constant excursion temperature (°C)")
+    axis.set_ylim(bottom=-40.0)
     axis.grid(axis="y", alpha=0.12)
     fig.tight_layout()
     fig.savefig(output / "joint_temperature_violin.png", dpi=200)
@@ -291,99 +291,6 @@ def draw_timing(
     fig.savefig(output / "joint_temperature_timing.png", dpi=200)
     plt.close(fig)
     return timing_summary
-
-
-def draw_temperature_density_grid(
-    posterior: dict[str, np.ndarray],
-    responsibilities: np.ndarray,
-    scenarios: list[dict],
-    output: Path,
-) -> None:
-    """Draw the complete temperature density at every sampled timing cell."""
-    flat_temperature = posterior["temperature_c"].reshape(-1)
-    temperature_edges = np.linspace(-100.0, 25.0, 401)
-    temperature_grid = 0.5 * (temperature_edges[:-1] + temperature_edges[1:])
-    duration_rows = (10, 100, 200, 500, 1300)
-    fig, axes = plt.subplots(
-        len(duration_rows),
-        1,
-        figsize=(9.2, 11.5),
-        sharex=True,
-        sharey=True,
-    )
-    for axis, duration in zip(axes, duration_rows):
-        cells = sorted(
-            (
-                cell
-                for cell in scenarios
-                if int(cell["duration_my"]) == duration
-            ),
-            key=lambda cell: cell["start_age_before_present_my"],
-        )
-        for cell in cells:
-            index = int(cell["index"])
-            start = float(cell["start_age_before_present_my"])
-            weights = responsibilities[..., index].reshape(-1)
-            density, _ = np.histogram(
-                flat_temperature,
-                bins=temperature_edges,
-                weights=weights,
-                density=True,
-            )
-            density = gaussian_filter1d(density, sigma=2.0, mode="nearest")
-            half_width = 44.0 * density / max(float(density.max()), 1e-12)
-            axis.fill_betweenx(
-                temperature_grid,
-                start - half_width,
-                start + half_width,
-                color=LIGHT_BLUE,
-                alpha=0.78,
-                linewidth=0,
-            )
-            axis.plot(
-                start - half_width,
-                temperature_grid,
-                color=BLUE,
-                lw=0.75,
-            )
-            axis.plot(
-                start + half_width,
-                temperature_grid,
-                color=BLUE,
-                lw=0.75,
-            )
-            low, median, high = weighted_quantile(
-                flat_temperature,
-                weights,
-                np.asarray([0.025, 0.5, 0.975]),
-            )
-            axis.vlines(start, low, high, color=DARK, lw=1.0, zorder=4)
-            axis.scatter(
-                start,
-                median,
-                color=ORANGE,
-                s=18,
-                zorder=5,
-            )
-        axis.axhline(0.0, color="#5b67b7", ls="--", lw=0.85)
-        axis.set_ylabel(f"{duration / 1000:g} Gy" if duration >= 1000 else f"{duration} My")
-        axis.grid(alpha=0.10)
-    axes[-1].set_xlabel("excursion onset before present (My)")
-    fig.supylabel("constant excursion temperature (°C)", x=0.015)
-    axes[-1].set_xlim(-55, 1360)
-    axes[-1].set_ylim(-101, 25)
-    fig.text(
-        0.995,
-        0.006,
-        "silhouette: full conditional density   line: central 95%   point: median",
-        ha="right",
-        va="bottom",
-        fontsize=8,
-        color="#59636a",
-    )
-    fig.tight_layout(rect=(0.025, 0.018, 1, 1))
-    fig.savefig(output / "joint_temperature_density_grid.png", dpi=220)
-    plt.close(fig)
 
 
 def draw_ppc(
@@ -529,9 +436,6 @@ def main() -> None:
     )
     draw_temperature_violins(
         posterior, responsibilities, scenarios, args.output_dir, rng
-    )
-    draw_temperature_density_grid(
-        posterior, responsibilities, scenarios, args.output_dir
     )
     summary["temperature_timing"] = draw_timing(scenarios, args.output_dir)
     summary["posterior_predictive_coverage"] = draw_ppc(
